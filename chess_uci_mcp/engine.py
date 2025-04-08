@@ -4,17 +4,16 @@ Chess engine wrapper module.
 This module provides functionality to interact with UCI-compatible chess engines.
 """
 
-import asyncio
 import logging
-from pathlib import Path
 from typing import Any, Optional
 
+import chess.engine
 
 logger = logging.getLogger(__name__)
 
 
 class UCIEngine:
-    """A wrapper for UCI chess engines."""
+    """A wrapper for UCI chess engines using python-chess."""
 
     def __init__(self, engine_path: str, options: Optional[dict[str, Any]] = None):
         """
@@ -24,9 +23,10 @@ class UCIEngine:
             engine_path: Path to the UCI engine executable
             options: Dictionary of engine options to set
         """
-        self.engine_path = Path(engine_path)
+        self.engine_path = engine_path
         self.options = options or {}
-        self.process: Optional[asyncio.subprocess.Process] = None
+        self.transport = None
+        self.engine = None
         self._ready = False
 
     async def start(self) -> None:
@@ -34,60 +34,38 @@ class UCIEngine:
         Start the engine process.
 
         Raises:
-            FileNotFoundError: If the engine executable is not found
             RuntimeError: If the engine fails to start
         """
-        if not self.engine_path.exists():
-            raise FileNotFoundError(f"Engine not found at {self.engine_path}")
-
         logger.info("Starting engine: %s", self.engine_path)
         try:
-            self.process = await asyncio.create_subprocess_exec(
-                str(self.engine_path),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            # Start the engine process
+            self.transport, self.engine = await chess.engine.popen_uci(self.engine_path)
 
-            # Initialize UCI mode
-            await self._send_command("uci")
-            await self._wait_for_uciok()
-
-            # Set options
-            for name, value in self.options.items():
-                await self._send_command(f"setoption name {name} value {value}")
-
-            # Indicate that the engine is ready
-            await self._send_command("isready")
-            await self._wait_for_readyok()
+            # Configure engine options
+            if self.options:
+                await self.engine.configure(self.options)
 
             self._ready = True
             logger.info("Engine %s started and ready", self.engine_path)
         except Exception as e:
             logger.error("Failed to start engine: %s", e)
-            if self.process:
-                self.process.terminate()
-                self.process = None
+            if self.transport and self.engine:
+                await self.engine.quit()
+                self.transport = None
+                self.engine = None
             raise RuntimeError(f"Failed to start engine: {e}")
 
     async def stop(self) -> None:
         """Stop the engine process."""
-        if self.process:
+        if self.engine:
             logger.info("Stopping engine: %s", self.engine_path)
             try:
-                await self._send_command("quit")
-                try:
-                    await asyncio.wait_for(self.process.wait(), timeout=2.0)
-                except asyncio.TimeoutError:
-                    logger.warning("Engine %s did not exit, terminating", self.engine_path)
-                    self.process.terminate()
-                    await self.process.wait()
+                await self.engine.quit()
             except Exception as e:
                 logger.error("Error during engine shutdown: %s", e)
-                if self.process:
-                    self.process.terminate()
             finally:
-                self.process = None
+                self.transport = None
+                self.engine = None
                 self._ready = False
 
     async def analyze_position(self, fen: str, time_ms: int = 1000) -> dict[str, Any]:
@@ -104,18 +82,27 @@ class UCIEngine:
         Raises:
             RuntimeError: If the engine is not started
         """
-        if not self.process or not self._ready:
+        if not self.engine or not self._ready:
             raise RuntimeError("Engine not started")
 
-        # Set position
-        await self._send_command(f"position fen {fen}")
+        # Create a board from the FEN string
+        board = chess.Board(fen)
 
-        # Start analysis
-        await self._send_command(f"go movetime {time_ms}")
+        # Set time limit for analysis
+        limit = chess.engine.Limit(time=time_ms / 1000)
 
-        # Collect and parse output
-        analysis_result = await self._collect_analysis(time_ms)
-        return analysis_result
+        # Run analysis
+        info = await self.engine.analyse(board, limit)
+
+        # Format the result
+        result = {
+            "depth": info.get("depth", 0),
+            "score": self._format_score(info.get("score")),
+            "pv": [move.uci() for move in info.get("pv", [])],
+            "best_move": info.get("pv", [None])[0].uci() if info.get("pv") else None,
+        }
+
+        return result
 
     async def set_position(
         self, fen: Optional[str] = None, moves: Optional[list[str]] = None
@@ -130,19 +117,17 @@ class UCIEngine:
         Raises:
             RuntimeError: If the engine is not started
         """
-        if not self.process or not self._ready:
+        if not self.engine or not self._ready:
             raise RuntimeError("Engine not started")
 
-        cmd = "position"
-        if fen:
-            cmd += f" fen {fen}"
-        else:
-            cmd += " startpos"
+        # This method doesn't do anything directly with python-chess
+        # as the engine state is managed internally by the chess.engine module.
+        # Position will be set when get_best_move or analyze_position is called.
 
-        if moves and len(moves) > 0:
-            cmd += " moves " + " ".join(moves)
-
-        await self._send_command(cmd)
+        # Store the position information for later use
+        self._current_fen = fen
+        self._current_moves = moves or []
+        logger.debug("Position set: FEN=%s, Moves=%s", fen or "startpos", moves)
 
     async def get_best_move(self, time_ms: int = 1000) -> str:
         """
@@ -157,160 +142,53 @@ class UCIEngine:
         Raises:
             RuntimeError: If the engine is not started
         """
-        if not self.process or not self._ready:
+        if not self.engine or not self._ready:
             raise RuntimeError("Engine not started")
 
-        await self._send_command(f"go movetime {time_ms}")
+        # Create a board
+        board = (
+            chess.Board(self._current_fen)
+            if hasattr(self, "_current_fen") and self._current_fen
+            else chess.Board()
+        )
 
-        best_move = await self._wait_for_bestmove()
-        return best_move
+        # Apply moves if any
+        if hasattr(self, "_current_moves") and self._current_moves:
+            for move_uci in self._current_moves:
+                board.push_uci(move_uci)
 
-    async def _send_command(self, command: str) -> None:
+        # Set time limit
+        limit = chess.engine.Limit(time=time_ms / 1000)
+
+        # Get best move
+        result = await self.engine.play(board, limit)
+
+        # Return the move in UCI format
+        return result.move.uci() if result.move else ""
+
+    def _format_score(self, score: Optional[chess.engine.PovScore]) -> Optional[Any]:
         """
-        Send a command to the engine.
+        Format the score from the engine analysis.
 
         Args:
-            command: UCI command string
-        """
-        if not self.process or not self.process.stdin:
-            raise RuntimeError("Engine process not available")
-
-        logger.debug("Sending command: %s", command)
-        cmd_bytes = (command + "\n").encode("utf-8")
-        self.process.stdin.write(cmd_bytes)
-        await self.process.stdin.drain()
-
-    async def _read_line(self) -> str:
-        """
-        Read a line from the engine output.
+            score: PovScore object from python-chess
 
         Returns:
-            Line of text from the engine
+            Formatted score value
         """
-        if not self.process or not self.process.stdout:
-            raise RuntimeError("Engine process not available")
+        if score is None:
+            return None
 
-        line = await self.process.stdout.readline()
-        result = line.decode("utf-8").strip()
-        logger.debug("Engine output: %s", result)
-        return result
+        # Get score from white's perspective
+        white_score = score.white()
 
-    async def _wait_for_uciok(self) -> None:
-        """Wait for the engine to send 'uciok'."""
-        while True:
-            line = await self._read_line()
-            if line == "uciok":
-                return
+        # Check if it's a mate score
+        if white_score.is_mate():
+            mate_in = white_score.mate()
+            return f"mate{mate_in}" if mate_in is not None else None
 
-    async def _wait_for_readyok(self) -> None:
-        """Wait for the engine to send 'readyok'."""
-        while True:
-            line = await self._read_line()
-            if line == "readyok":
-                return
+        # Return centipawn score as a float
+        if white_score.score() is not None:
+            return white_score.score() / 100.0
 
-    async def _wait_for_bestmove(self) -> str:
-        """
-        Wait for the engine to send the best move.
-
-        Returns:
-            Best move in UCI format
-        """
-        while True:
-            line = await self._read_line()
-            if line.startswith("bestmove "):
-                parts = line.split()
-                if len(parts) >= 2:
-                    return parts[1]
-
-    async def _collect_analysis(self, timeout_ms: int) -> dict[str, Any]:
-        """
-        Collect analysis information from engine output.
-
-        Args:
-            timeout_ms: Timeout in milliseconds
-
-        Returns:
-            Dictionary with analysis data
-        """
-        result = {
-            "depth": 0,
-            "score": None,
-            "pv": [],
-            "best_move": None,
-        }
-
-        # Set a timeout slightly longer than the requested thinking time
-        timeout = timeout_ms / 1000 + 0.5
-
-        end_time = asyncio.get_event_loop().time() + timeout
-
-        while True:
-            # Check if we've exceeded the timeout
-            remaining = end_time - asyncio.get_event_loop().time()
-            if remaining <= 0:
-                break
-
-            try:
-                line = await asyncio.wait_for(self._read_line(), timeout=remaining)
-
-                # Parse the line
-                if line.startswith("bestmove "):
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        result["best_move"] = parts[1]
-                    break
-
-                elif line.startswith("info "):
-                    self._parse_info_line(line, result)
-
-            except asyncio.TimeoutError:
-                break
-
-        return result
-
-    def _parse_info_line(self, line: str, result: dict[str, Any]) -> None:
-        """
-        Parse an info line from the engine.
-
-        Args:
-            line: Info line from the engine
-            result: Result dictionary to update
-        """
-        parts = line.split()
-        i = 1  # Skip "info"
-
-        while i < len(parts):
-            if parts[i] == "depth" and i + 1 < len(parts):
-                try:
-                    depth = int(parts[i + 1])
-                    if depth > result["depth"]:
-                        result["depth"] = depth
-                    i += 2
-                except ValueError:
-                    i += 2
-
-            elif parts[i] == "score" and i + 2 < len(parts):
-                score_type = parts[i + 1]
-                try:
-                    if score_type == "cp":
-                        result["score"] = int(parts[i + 2]) / 100.0
-                    elif score_type == "mate":
-                        mate_in = int(parts[i + 2])
-                        result["score"] = "mate" + str(mate_in)
-                    i += 3
-                except ValueError:
-                    i += 3
-
-            elif parts[i] == "pv" and i + 1 < len(parts):
-                # Collect the PV (principal variation)
-                pv = []
-                i += 1
-                while i < len(parts) and parts[i] not in ["depth", "score", "time"]:
-                    pv.append(parts[i])
-                    i += 1
-                if len(pv) > 0:
-                    result["pv"] = pv
-
-            else:
-                i += 1
+        return None
