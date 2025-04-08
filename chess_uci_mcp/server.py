@@ -153,7 +153,9 @@ class ChessUCIBridge:
     async def _ensure_engine_started(self):
         """Ensure the engine is started."""
         if not self.engine:
-            self.engine = UCIEngine(self.engine_path, self.engine_options)
+            # Create a copy of options without think_time (it's not a UCI option)
+            engine_options = {k: v for k, v in self.engine_options.items() if k != "think_time"}
+            self.engine = UCIEngine(self.engine_path, engine_options)
             await self.engine.start()
 
     async def start(self):

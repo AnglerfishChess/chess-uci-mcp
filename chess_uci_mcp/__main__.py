@@ -36,16 +36,17 @@ def main(
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        stream=sys.stderr,  # Ensure logs go to stderr, not stdout
     )
     logger = logging.getLogger("chess_uci_mcp")
     logger.setLevel(log_level)
 
-    # Output startup information
-    click.echo("Starting Chess UCI MCP bridge")
-    click.echo(f"Engine path: {engine_path}")
-    click.echo(f"Threads: {threads}")
-    click.echo(f"Hash: {hash} MB")
-    click.echo(f"Think time: {think_time} ms")
+    # Output startup information to logs instead of stdout
+    logger.info("Starting Chess UCI MCP bridge")
+    logger.info("Engine path: %s", engine_path)
+    logger.info("Threads: %d", threads)
+    logger.info("Hash: %d MB", hash)
+    logger.info("Think time: %d ms", think_time)
 
     # Create and start bridge
     bridge = ChessUCIBridge(
