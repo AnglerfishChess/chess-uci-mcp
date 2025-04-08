@@ -1,6 +1,6 @@
 # chess-uci-mcp
 
-An MCP server that provides an interface to UCI chess engines (such as Stockfish).
+An MCP bridge that provides an interface to UCI chess engines (such as Stockfish).
 
 ## Installation
 
@@ -23,7 +23,7 @@ uv pip install -e .
 
 ## Usage
 
-After installation, you can run the server with:
+After installation, you can run the MCP bridge with:
 
 ```bash
 uv run chess-uci-mcp /path/to/stockfish
@@ -41,6 +41,15 @@ Add the following server to your MCP configuration:
   }
 }
 ```
+
+## Available Tools
+
+The bridge provides the following MCP tools:
+
+1. `analyze` - Analyze a chess position specified by FEN string
+2. `get_best_move` - Get the best move for a chess position
+3. `set_position` - Set the current chess position
+4. `engine_info` - Get information about the chess engine
 
 ## Development
 

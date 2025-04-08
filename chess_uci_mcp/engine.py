@@ -7,7 +7,7 @@ This module provides functionality to interact with UCI-compatible chess engines
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class UCIEngine:
     """A wrapper for UCI chess engines."""
 
-    def __init__(self, engine_path: str, options: Optional[Dict[str, Any]] = None):
+    def __init__(self, engine_path: str, options: Optional[dict[str, Any]] = None):
         """
         Initialize UCI engine wrapper.
 
@@ -40,7 +40,7 @@ class UCIEngine:
         if not self.engine_path.exists():
             raise FileNotFoundError(f"Engine not found at {self.engine_path}")
 
-        logger.info(f"Starting engine: {self.engine_path}")
+        logger.info("Starting engine: %s", self.engine_path)
         try:
             self.process = await asyncio.create_subprocess_exec(
                 str(self.engine_path),
@@ -62,9 +62,9 @@ class UCIEngine:
             await self._wait_for_readyok()
 
             self._ready = True
-            logger.info(f"Engine {self.engine_path} started and ready")
+            logger.info("Engine %s started and ready", self.engine_path)
         except Exception as e:
-            logger.error(f"Failed to start engine: {e}")
+            logger.error("Failed to start engine: %s", e)
             if self.process:
                 self.process.terminate()
                 self.process = None
@@ -73,24 +73,24 @@ class UCIEngine:
     async def stop(self) -> None:
         """Stop the engine process."""
         if self.process:
-            logger.info(f"Stopping engine: {self.engine_path}")
+            logger.info("Stopping engine: %s", self.engine_path)
             try:
                 await self._send_command("quit")
                 try:
                     await asyncio.wait_for(self.process.wait(), timeout=2.0)
                 except asyncio.TimeoutError:
-                    logger.warning(f"Engine {self.engine_path} did not exit, terminating")
+                    logger.warning("Engine %s did not exit, terminating", self.engine_path)
                     self.process.terminate()
                     await self.process.wait()
             except Exception as e:
-                logger.error(f"Error during engine shutdown: {e}")
+                logger.error("Error during engine shutdown: %s", e)
                 if self.process:
                     self.process.terminate()
             finally:
                 self.process = None
                 self._ready = False
 
-    async def analyze_position(self, fen: str, time_ms: int = 1000) -> Dict[str, Any]:
+    async def analyze_position(self, fen: str, time_ms: int = 1000) -> dict[str, Any]:
         """
         Analyze a chess position and return the best move and evaluation.
 
@@ -118,7 +118,7 @@ class UCIEngine:
         return analysis_result
 
     async def set_position(
-        self, fen: Optional[str] = None, moves: Optional[List[str]] = None
+        self, fen: Optional[str] = None, moves: Optional[list[str]] = None
     ) -> None:
         """
         Set a position on the engine's internal board.
@@ -175,7 +175,7 @@ class UCIEngine:
         if not self.process or not self.process.stdin:
             raise RuntimeError("Engine process not available")
 
-        logger.debug(f"Sending command: {command}")
+        logger.debug("Sending command: %s", command)
         cmd_bytes = (command + "\n").encode("utf-8")
         self.process.stdin.write(cmd_bytes)
         await self.process.stdin.drain()
@@ -192,7 +192,7 @@ class UCIEngine:
 
         line = await self.process.stdout.readline()
         result = line.decode("utf-8").strip()
-        logger.debug(f"Engine output: {result}")
+        logger.debug("Engine output: %s", result)
         return result
 
     async def _wait_for_uciok(self) -> None:
@@ -223,7 +223,7 @@ class UCIEngine:
                 if len(parts) >= 2:
                     return parts[1]
 
-    async def _collect_analysis(self, timeout_ms: int) -> Dict[str, Any]:
+    async def _collect_analysis(self, timeout_ms: int) -> dict[str, Any]:
         """
         Collect analysis information from engine output.
 
@@ -269,7 +269,7 @@ class UCIEngine:
 
         return result
 
-    def _parse_info_line(self, line: str, result: Dict[str, Any]) -> None:
+    def _parse_info_line(self, line: str, result: dict[str, Any]) -> None:
         """
         Parse an info line from the engine.
 

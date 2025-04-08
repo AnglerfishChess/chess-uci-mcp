@@ -4,233 +4,173 @@ MCP server module for chess engine integration.
 This module implements the MCP server that provides access to UCI chess engines.
 """
 
-import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import chess
-from mcp import Server, Handler  # Changed from MCPServer, MCPHandler
+from mcp.server import FastMCP
 
-from chess_uci_mcp.config import Config
 from chess_uci_mcp.engine import UCIEngine
 
 logger = logging.getLogger(__name__)
 
 
-class ChessEngineServer:
-    """MCP Server for UCI chess engines."""
+class ChessUCIBridge:
+    """Bridge between MCP and UCI chess engines."""
 
-    def __init__(self, config: Config):
+    def __init__(self, engine_path: str, **options):
         """
-        Initialize the chess engine MCP server.
+        Initialize the chess UCI bridge.
 
         Args:
-            config: Server configuration
+            engine_path: Path to the UCI engine executable
+            options: Engine options (threads, hash, etc.)
         """
-        self.config = config
+        self.engine_path = engine_path
+        self.engine_options = {
+            "Threads": options.get("threads", 4),
+            "Hash": options.get("hash", 128),
+        }
+
+        # Add any additional options
+        for key, value in options.items():
+            if key not in ["threads", "hash"] and not key.startswith("_"):
+                self.engine_options[key] = value
+
+        self.default_think_time = options.get("think_time", 1000)
         self.engine: Optional[UCIEngine] = None
-        self.server: Optional[Server] = None  # Changed from MCPServer
-        self.stop_event = asyncio.Event()
+        self.mcp = FastMCP("chess-uci")
 
-    async def start(self) -> None:
-        """
-        Start the server and chess engine.
+        # Register tools
+        self._register_tools()
 
-        Raises:
-            RuntimeError: If server fails to start
-        """
-        try:
-            # Initialize the chess engine
-            self.engine = UCIEngine(self.config.engine.path, self.config.engine.options)
+    def _register_tools(self):
+        """Register MCP tools for chess engine functions."""
+
+        @self.mcp.tool("analyze", description="Analyze a chess position specified by FEN string.")
+        async def analyze(fen: str, time_ms: Optional[int] = None) -> dict[str, Any]:
+            """
+            Analyze a chess position.
+
+            Args:
+                fen: FEN string representation of the position
+                time_ms: Time to think in milliseconds (default uses bridge setting)
+
+            Returns:
+                Analysis results
+            """
+            if not self.engine:
+                await self._ensure_engine_started()
+
+            # Use default time if not specified
+            think_time = time_ms if time_ms is not None else self.default_think_time
+
+            # Validate FEN
+            try:
+                chess.Board(fen)
+            except ValueError:
+                raise ValueError(f"Invalid FEN string: {fen}")
+
+            result = await self.engine.analyze_position(fen, think_time)
+            return result
+
+        @self.mcp.tool("get_best_move", description="Get the best move for a chess position.")
+        async def get_best_move(fen: Optional[str] = None, time_ms: Optional[int] = None) -> str:
+            """
+            Get best move for current or specified position.
+
+            Args:
+                fen: FEN string (optional, if omitted uses current position)
+                time_ms: Time to think in milliseconds (default uses bridge setting)
+
+            Returns:
+                Best move in UCI format (e.g., "e2e4")
+            """
+            if not self.engine:
+                await self._ensure_engine_started()
+
+            # Set position if FEN is provided
+            if fen:
+                try:
+                    chess.Board(fen)
+                    await self.engine.set_position(fen)
+                except ValueError:
+                    raise ValueError(f"Invalid FEN string: {fen}")
+
+            # Use default time if not specified
+            think_time = time_ms if time_ms is not None else self.default_think_time
+
+            best_move = await self.engine.get_best_move(think_time)
+            return best_move
+
+        @self.mcp.tool("set_position", description="Set the current chess position.")
+        async def set_position(
+            fen: Optional[str] = None, moves: Optional[list[str]] = None
+        ) -> dict[str, bool]:
+            """
+            Set a position on the engine's internal board.
+
+            Args:
+                fen: FEN string (if None, uses starting position)
+                moves: List of moves in UCI format
+
+            Returns:
+                Success status
+            """
+            if not self.engine:
+                await self._ensure_engine_started()
+
+            # Validate FEN if provided
+            if fen:
+                try:
+                    chess.Board(fen)
+                except ValueError:
+                    raise ValueError(f"Invalid FEN string: {fen}")
+
+            # Validate moves
+            if moves and not isinstance(moves, list):
+                raise ValueError("Moves must be a list of strings")
+
+            await self.engine.set_position(fen, moves)
+            return {"success": True}
+
+        @self.mcp.tool("engine_info", description="Get information about the chess engine.")
+        async def engine_info() -> dict[str, Any]:
+            """
+            Get engine information.
+
+            Returns:
+                Engine information
+            """
+            if not self.engine:
+                await self._ensure_engine_started()
+
+            return {
+                "path": self.engine_path,
+                "options": self.engine_options,
+            }
+
+    async def _ensure_engine_started(self):
+        """Ensure the engine is started."""
+        if not self.engine:
+            self.engine = UCIEngine(self.engine_path, self.engine_options)
             await self.engine.start()
 
-            # Create MCP server and add handlers
-            handler = ChessEngineHandler(self.engine, self.config)
-            self.server = Server(  # Changed from MCPServer
-                host=self.config.server.host,
-                port=self.config.server.port,
-            )
-            self.server.add_handler("chess", handler)
+    async def start(self):
+        """Start the MCP bridge."""
+        logger.info("Starting Chess UCI MCP bridge with engine: %s", self.engine_path)
 
-            # Start the server
-            await self.server.start()
-            actual_port = self.server.port
+        # Start the engine
+        await self._ensure_engine_started()
 
-            logger.info(f"Chess UCI MCP server started on {self.config.server.host}:{actual_port}")
-            logger.info(
-                f"Connected to engine: {self.config.engine.name} at {self.config.engine.path}"
-            )
+        # Run in stdio mode
+        await self.mcp.run_stdio_async()
 
-            # Wait until stop is requested
-            await self.stop_event.wait()
-
-        except Exception as e:
-            logger.error(f"Failed to start server: {e}")
-            await self.stop()
-            raise RuntimeError(f"Failed to start server: {e}")
-
-    async def stop(self) -> None:
-        """Stop the server and chess engine."""
-        logger.info("Stopping Chess UCI MCP server")
+    async def stop(self):
+        """Stop the MCP bridge."""
+        logger.info("Stopping Chess UCI MCP bridge")
 
         # Stop the engine
         if self.engine:
             await self.engine.stop()
             self.engine = None
-
-        # Stop the server
-        if self.server:
-            await self.server.stop()
-            self.server = None
-
-        # Set the stop event
-        self.stop_event.set()
-
-
-class ChessEngineHandler(Handler):  # Changed from MCPHandler
-    """MCP handler for chess engine commands."""
-
-    def __init__(self, engine: UCIEngine, config: Config):
-        """
-        Initialize the chess engine handler.
-
-        Args:
-            engine: UCI engine instance
-            config: Server configuration
-        """
-        super().__init__()
-        self.engine = engine
-        self.config = config
-
-    async def handle_request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle an MCP request.
-
-        Args:
-            method: Method name
-            params: Method parameters
-
-        Returns:
-            Dictionary with response data
-
-        Raises:
-            Exception: If the method is not supported or an error occurs
-        """
-        logger.debug(f"Received request: {method} with params: {params}")
-
-        try:
-            if method == "analyze":
-                return await self._handle_analyze(params)
-            elif method == "get_best_move":
-                return await self._handle_get_best_move(params)
-            elif method == "set_position":
-                return await self._handle_set_position(params)
-            elif method == "engine_info":
-                return await self._handle_engine_info(params)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-        except Exception as e:
-            logger.error(f"Error handling request {method}: {e}")
-            raise
-
-    async def _handle_analyze(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle analysis request.
-
-        Args:
-            params: Request parameters, must include 'fen'
-
-        Returns:
-            Analysis results
-        """
-        # Get FEN string
-        fen = params.get("fen")
-        if not fen:
-            raise ValueError("Missing required parameter 'fen'")
-
-        # Validate FEN
-        try:
-            chess.Board(fen)
-        except ValueError:
-            raise ValueError(f"Invalid FEN string: {fen}")
-
-        # Get think time
-        think_time = params.get("time_ms", self.config.default_think_time)
-
-        # Analyze position
-        result = await self.engine.analyze_position(fen, think_time)
-
-        return {"result": result}
-
-    async def _handle_get_best_move(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle best move request.
-
-        Args:
-            params: Request parameters
-
-        Returns:
-            Best move information
-        """
-        # If FEN is provided, set the position first
-        fen = params.get("fen")
-        if fen:
-            try:
-                chess.Board(fen)
-                await self.engine.set_position(fen)
-            except ValueError:
-                raise ValueError(f"Invalid FEN string: {fen}")
-
-        # Get think time
-        think_time = params.get("time_ms", self.config.default_think_time)
-
-        # Get best move
-        best_move = await self.engine.get_best_move(think_time)
-
-        return {"move": best_move}
-
-    async def _handle_set_position(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle set position request.
-
-        Args:
-            params: Request parameters
-
-        Returns:
-            Success status
-        """
-        # Get FEN and moves
-        fen = params.get("fen")
-        moves = params.get("moves")
-
-        # Validate FEN if provided
-        if fen:
-            try:
-                chess.Board(fen)
-            except ValueError:
-                raise ValueError(f"Invalid FEN string: {fen}")
-
-        # Validate moves if provided
-        if moves and not isinstance(moves, list):
-            raise ValueError("Moves must be a list")
-
-        # Set position
-        await self.engine.set_position(fen, moves)
-
-        return {"success": True}
-
-    async def _handle_engine_info(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle engine info request.
-
-        Args:
-            params: Request parameters (unused)
-
-        Returns:
-            Engine information
-        """
-        return {
-            "name": self.config.engine.name,
-            "path": self.config.engine.path,
-            "options": self.config.engine.options,
-        }

@@ -5,23 +5,22 @@ Entry point for the Chess UCI MCP server.
 This module provides the main CLI interface for starting and configuring the server.
 """
 
+import asyncio
 import logging
+import sys
 
 import click
 
+from chess_uci_mcp.server import ChessUCIBridge
 
 @click.command()
 @click.argument("engine_path", type=click.Path(exists=True))
-@click.option("--host", "-h", default="localhost", help="Host to bind the server to")
-@click.option("--port", "-p", default=8765, type=int, help="Port to bind the server to")
 @click.option("--threads", "-t", default=4, type=int, help="Number of engine threads to use")
 @click.option("--hash", default=128, type=int, help="Hash table size in MB")
 @click.option("--think-time", default=1000, type=int, help="Default thinking time in ms")
 @click.option("--debug/--no-debug", default=False, help="Enable debug logging")
 def main(
     engine_path: str,
-    host: str = "localhost",
-    port: int = 8765,
     threads: int = 4,
     hash: int = 128,
     think_time: int = 1000,
@@ -42,19 +41,30 @@ def main(
     logger.setLevel(log_level)
 
     # Output startup information
-    click.echo("Starting Chess UCI MCP server")
+    click.echo("Starting Chess UCI MCP bridge")
     click.echo(f"Engine path: {engine_path}")
-    click.echo(f"Host: {host}")
-    click.echo(f"Port: {port}")
     click.echo(f"Threads: {threads}")
     click.echo(f"Hash: {hash} MB")
     click.echo(f"Think time: {think_time} ms")
 
-    # Stub, real implementation will be here later
-    click.echo("Stub: server is running")
+    # Create and start bridge
+    bridge = ChessUCIBridge(
+        engine_path,
+        threads=threads,
+        hash=hash,
+        think_time=think_time
+    )
 
-    return
-
+    # Run the bridge
+    try:
+        asyncio.run(bridge.start())
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received, shutting down")
+        asyncio.run(bridge.stop())
+    except Exception as e:
+        logger.error("Error running bridge: %s", e)
+        asyncio.run(bridge.stop())
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
