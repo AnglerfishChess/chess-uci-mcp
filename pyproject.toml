@@ -1,0 +1,37 @@
+[project]
+name = "chess-uci-mcp"
+version = "0.1.0"
+description = "MCP server to connect to the chess engines using UCI protocol"
+authors = [
+    {name = "Alex Myodov", email = "amyodov@gmail.com"}
+]
+license = {text = "MIT License"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "chess>=1.11.2,<2.0.0",
+    "mcp[cli]>=1.6.0,<2.0.0",
+    "click>=8.1.8,<9.0.0",
+    "pyyaml>=6.0,<7.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.11.4",
+]
+
+[project.scripts]
+chess-uci-mcp = "chess_uci_mcp.__main__:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["chess_uci_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
