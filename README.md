@@ -37,7 +37,7 @@ Set up your MCP server configuration (e.g. Claude Desktop configuration) file as
 ```json
 "mcpServers": {
   "chess-uci-mcp": {
-    "command": "uv",
+    "command": "uvx",
     "args": ["--from=git+https://github.com/AnglerfishChess/chess-uci-mcp", "chess-uci-mcp", "/usr/local/bin/stockfish"]
   }
 }
