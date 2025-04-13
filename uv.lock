@@ -43,7 +43,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/93/09/7d04d7581ae3bb8b5
 
 [[package]]
 name = "chess-uci-mcp"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "chess" },
@@ -55,6 +55,7 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "ruff" },
+    { name = "uv-publish" },
 ]
 
 [package.metadata]
@@ -64,6 +65,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], specifier = ">=1.6.0,<2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11.4" },
+    { name = "uv-publish", marker = "extra == 'dev'", specifier = ">=1.2" },
 ]
 provides-extras = ["dev"]
 
@@ -530,6 +532,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/82/5c/e6082df02e215b846b4b8c0b887a64d7d08ffaba30605502639d44c06b82/typing_inspection-0.4.0.tar.gz", hash = "sha256:9765c87de36671694a67904bf2c96e395be9c6439bb6c87b5142569dcdd65122", size = 76222 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/31/08/aa4fdfb71f7de5176385bd9e90852eaf6b5d622735020ad600f2bab54385/typing_inspection-0.4.0-py3-none-any.whl", hash = "sha256:50e72559fcd2a6367a19f7a7e610e6afcb9fac940c650290eed893d61386832f", size = 14125 },
+]
+
+[[package]]
+name = "uv-publish"
+version = "1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/84/6fabbe0bd158a76f83870f7006b917996e2002f7dd24d50eb86846854192/uv_publish-1.2.tar.gz", hash = "sha256:84a104b7698a0ea4eecdd0b243113daf2a4b6a206b58ad1b430409dd6bcbcbeb", size = 4257 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/33/e5cf9be147012f66c5461e2ecde429117c55bcd5cbcffcf3bf22a8bafe35/uv_publish-1.2-py3-none-any.whl", hash = "sha256:50300c478293197af8ce56f9f7fec23d85278805344aa756e30c6436c77b05a3", size = 3972 },
 ]
 
 [[package]]

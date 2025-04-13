@@ -7,6 +7,20 @@ authors = [
 ]
 license = {text = "MIT License"}
 readme = "README.md"
+keywords = ["chess", "UCI", "chess engine", "uci protocol", "uci chess", "MCP", "model context protocol"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Games/Entertainment :: Board Games",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent"
+]
 requires-python = ">=3.10"
 dependencies = [
     "chess>=1.11.2,<2.0.0",
@@ -22,6 +36,7 @@ build-backend = "setuptools.build_meta"
 dev = [
     "pytest>=8.3.0",
     "ruff>=0.11.4",
+    "uv-publish>=1.2",
 ]
 
 [project.scripts]

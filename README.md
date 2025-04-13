@@ -38,7 +38,7 @@ Set up your MCP server configuration (e.g. Claude Desktop configuration) file as
 "mcpServers": {
   "chess-uci-mcp": {
     "command": "uvx",
-    "args": ["--from=git+https://github.com/AnglerfishChess/chess-uci-mcp", "chess-uci-mcp", "/usr/local/bin/stockfish"]
+    "args": ["chess-uci-mcp@latest", "/usr/local/bin/stockfish"]
   }
 }
 ```
@@ -88,9 +88,19 @@ source .venv/bin/activate  # On Unix/macOS
 # or, with development dependencies
 uv pip install -e ".[dev]"
 
+# Resync the packages:
+uv sync --extra=dev
+
 # Run tests
 pytest
 
 # Check code style
 ruff check
+```
+
+### Release process
+
+```bash
+uv build
+uv-publish
 ```

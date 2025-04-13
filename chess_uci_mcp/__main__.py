@@ -13,6 +13,7 @@ import click
 
 from chess_uci_mcp.server import ChessUCIBridge
 
+
 @click.command()
 @click.argument("engine_path", type=click.Path(exists=True))
 @click.option("--threads", "-t", default=4, type=int, help="Number of engine threads to use")
@@ -49,12 +50,7 @@ def main(
     logger.info("Think time: %d ms", think_time)
 
     # Create and start bridge
-    bridge = ChessUCIBridge(
-        engine_path,
-        threads=threads,
-        hash=hash,
-        think_time=think_time
-    )
+    bridge = ChessUCIBridge(engine_path, threads=threads, hash=hash, think_time=think_time)
 
     # Run the bridge
     try:
@@ -66,6 +62,7 @@ def main(
         logger.error("Error running bridge: %s", e)
         asyncio.run(bridge.stop())
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
