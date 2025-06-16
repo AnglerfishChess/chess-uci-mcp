@@ -104,3 +104,8 @@ ruff check
 uv build
 uv-publish
 ```
+
+## Related sites
+
+[Certified by MCP Review](https://mcpreview.com/mcp-servers/anglerfishchess/chess-uci-mcp)
+
