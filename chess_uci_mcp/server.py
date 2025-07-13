@@ -24,20 +24,12 @@ class ChessUCIBridge:
 
         Args:
             engine_path: Path to the UCI engine executable
-            options: Engine options (threads, hash, etc.)
+            options: Engine options (e.g., think_time, Threads, Hash)
         """
         self.engine_path = engine_path
-        self.engine_options = {
-            "Threads": options.get("threads", 4),
-            "Hash": options.get("hash", 128),
-        }
+        self.default_think_time = options.pop("think_time", 1000)
+        self.engine_options = options
 
-        # Add any additional options
-        for key, value in options.items():
-            if key not in ["threads", "hash"] and not key.startswith("_"):
-                self.engine_options[key] = value
-
-        self.default_think_time = options.get("think_time", 1000)
         self.engine: Optional[UCIEngine] = None
         self.mcp = FastMCP("chess-uci")
 

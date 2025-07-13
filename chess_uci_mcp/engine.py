@@ -43,7 +43,17 @@ class UCIEngine:
 
             # Configure engine options
             if self.options:
-                await self.engine.configure(self.options)
+                supported_options = self.engine.options
+                configurable_options = {}
+                for name, value in self.options.items():
+                    if name in supported_options:
+                        configurable_options[name] = value
+                        logger.info("Setting engine option: %s = %s", name, value)
+                    else:
+                        logger.warning("Engine does not support option '%s'. Ignoring.", name)
+
+                if configurable_options:
+                    await self.engine.configure(configurable_options)
 
             self._ready = True
             logger.info("Engine %s started and ready", self.engine_path)

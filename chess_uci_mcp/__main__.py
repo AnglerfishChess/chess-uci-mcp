@@ -13,17 +13,36 @@ import click
 
 from chess_uci_mcp.server import ChessUCIBridge
 
+logger = logging.getLogger("chess_uci_mcp")
+
+
+async def run_bridge(engine_path: str, uci_options: dict[str, str], think_time: int) -> None:
+    """Asynchronously run and manage the ChessUCIBridge."""
+    bridge = ChessUCIBridge(engine_path, think_time=think_time, options=uci_options)
+    try:
+        await bridge.start()
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received, shutting down")
+    finally:
+        logger.info("Shutting down bridge")
+        await bridge.stop()
+
 
 @click.command()
 @click.argument("engine_path", type=click.Path(exists=True))
-@click.option("--threads", "-t", default=4, type=int, help="Number of engine threads to use")
-@click.option("--hash", default=128, type=int, help="Hash table size in MB")
+@click.option(
+    "--uci-option",
+    "-o",
+    multiple=True,
+    type=(str, str),
+    metavar="NAME VALUE",
+    help="Set a UCI option (e.g., -o Threads 4)",
+)
 @click.option("--think-time", default=1000, type=int, help="Default thinking time in ms")
 @click.option("--debug/--no-debug", default=False, help="Enable debug logging")
 def main(
     engine_path: str,
-    threads: int = 4,
-    hash: int = 128,
+    uci_option: list[tuple[str, str]],
     think_time: int = 1000,
     debug: bool = False,
 ) -> None:
@@ -39,28 +58,24 @@ def main(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         stream=sys.stderr,  # Ensure logs go to stderr, not stdout
     )
-    logger = logging.getLogger("chess_uci_mcp")
-    logger.setLevel(log_level)
+    # Configure root logger
+    logging.getLogger().setLevel(log_level)
+
+    # Convert uci_option list of tuples to a dictionary
+    uci_options = dict(uci_option)
 
     # Output startup information to logs instead of stdout
     logger.info("Starting Chess UCI MCP bridge")
     logger.info("Engine path: %s", engine_path)
-    logger.info("Threads: %d", threads)
-    logger.info("Hash: %d MB", hash)
     logger.info("Think time: %d ms", think_time)
-
-    # Create and start bridge
-    bridge = ChessUCIBridge(engine_path, threads=threads, hash=hash, think_time=think_time)
+    for name, value in uci_options.items():
+        logger.info("UCI Option: %s = %s", name, value)
 
     # Run the bridge
     try:
-        asyncio.run(bridge.start())
-    except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received, shutting down")
-        asyncio.run(bridge.stop())
-    except Exception as e:
-        logger.error("Error running bridge: %s", e)
-        asyncio.run(bridge.stop())
+        asyncio.run(run_bridge(engine_path, uci_options, think_time))
+    except Exception:
+        logger.exception("Error running bridge")
         sys.exit(1)
 
 
