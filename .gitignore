@@ -78,4 +78,5 @@ __pypackages__/
 
 # Project-specific
 *nogit*
+*.local.*
 data-external/
