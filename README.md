@@ -142,9 +142,21 @@ ruff check
 
 ### Release process
 
+1. Bump version in `pyproject.toml` and `chess_uci_mcp/__init__.py`
+2. Build and publish:
+
 ```bash
 uv build
 uv-publish
+```
+
+We use `uv-publish` (install via `uvx uv-publish` or as dev dependency) because it automatically reads PyPI credentials from `~/.pypirc`.
+
+3. Tag and push:
+
+```bash
+git tag v0.x.x
+git push && git push --tags
 ```
 
 ## Related sites
