@@ -1,6 +1,6 @@
 [project]
 name = "chess-uci-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server to connect to the chess engines using UCI protocol"
 authors = [
     {name = "Alex Myodov", email = "amyodov@gmail.com"}
