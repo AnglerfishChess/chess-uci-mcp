@@ -142,7 +142,7 @@ ruff check
 
 ### Release process
 
-1. Bump version in `pyproject.toml` and `chess_uci_mcp/__init__.py`
+1. Bump version in `pyproject.toml`, `chess_uci_mcp/__init__.py` and `uv.lock`.
 2. Build and publish:
 
 ```bash

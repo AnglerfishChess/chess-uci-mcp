@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 import chess.engine
 
+from chess_uci_mcp.types import ConfigValue, OptionMetadata
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +30,7 @@ class UCIEngine:
         self.transport = None
         self.engine = None
         self._ready = False
+        self._current_option_values: dict[str, ConfigValue] = {}
 
     async def start(self) -> None:
         """
@@ -54,6 +57,7 @@ class UCIEngine:
 
                 if configurable_options:
                     await self.engine.configure(configurable_options)
+                    self._current_option_values.update(configurable_options)
 
             self._ready = True
             logger.info("Engine %s started and ready", self.engine_path)
@@ -200,5 +204,131 @@ class UCIEngine:
         # Return centipawn score as a float
         if white_score.score() is not None:
             return white_score.score() / 100.0
+
+        return None
+
+    def get_engine_id(self) -> dict[str, str]:
+        """
+        Get the engine identification info.
+
+        Returns:
+            Dictionary with engine ID info (typically 'name', 'author')
+
+        Raises:
+            RuntimeError: If the engine is not started
+        """
+        if not self.engine or not self._ready:
+            raise RuntimeError("Engine not started")
+        return dict(self.engine.id)
+
+    def get_available_options(self) -> dict[str, OptionMetadata]:
+        """
+        Get all available UCI options with their metadata.
+
+        Returns:
+            Dictionary mapping option names to their metadata
+
+        Raises:
+            RuntimeError: If the engine is not started
+        """
+        if not self.engine or not self._ready:
+            raise RuntimeError("Engine not started")
+
+        options: dict[str, OptionMetadata] = {}
+        for name, option in self.engine.options.items():
+            options[name] = {
+                "name": option.name,
+                "type": option.type,
+                "default": option.default,
+                "min": option.min,
+                "max": option.max,
+                "var": list(option.var) if option.var else None,
+            }
+        return options
+
+    def get_current_option_values(self) -> dict[str, ConfigValue]:
+        """
+        Get current values for all configured options.
+
+        Note: Returns values that were explicitly set. Options not set
+        use their defaults (available in option metadata).
+
+        Returns:
+            Dictionary mapping option names to their current values
+        """
+        return dict(self._current_option_values)
+
+    async def set_options(
+        self, options: dict[str, ConfigValue]
+    ) -> tuple[dict[str, ConfigValue], dict[str, str]]:
+        """
+        Set one or more UCI options at runtime.
+
+        Args:
+            options: Dictionary of option names to values
+
+        Returns:
+            Tuple of (successfully_applied, errors)
+
+        Raises:
+            RuntimeError: If the engine is not started
+        """
+        if not self.engine or not self._ready:
+            raise RuntimeError("Engine not started")
+
+        applied: dict[str, ConfigValue] = {}
+        errors: dict[str, str] = {}
+        supported_options = self.engine.options
+
+        for name, value in options.items():
+            if name not in supported_options:
+                errors[name] = f"Option '{name}' is not supported by this engine"
+                continue
+
+            # Validate the value based on option type
+            option_meta = supported_options[name]
+            validation_error = self._validate_option_value(option_meta, value)
+            if validation_error:
+                errors[name] = validation_error
+                continue
+
+            applied[name] = value
+
+        if applied:
+            await self.engine.configure(applied)
+            self._current_option_values.update(applied)
+            for name, value in applied.items():
+                logger.info("Set engine option: %s = %s", name, value)
+
+        return applied, errors
+
+    def _validate_option_value(self, option: Any, value: ConfigValue) -> Optional[str]:
+        """
+        Validate an option value against its constraints.
+
+        Args:
+            option: Option object from python-chess
+            value: Value to validate
+
+        Returns:
+            Error message if invalid, None if valid
+        """
+        if option.type == "check":
+            if not isinstance(value, bool):
+                return f"Expected boolean value for check option, got {type(value).__name__}"
+        elif option.type == "spin":
+            if not isinstance(value, int):
+                return f"Expected integer value for spin option, got {type(value).__name__}"
+            if option.min is not None and value < option.min:
+                return f"Value {value} is below minimum {option.min}"
+            if option.max is not None and value > option.max:
+                return f"Value {value} is above maximum {option.max}"
+        elif option.type == "combo":
+            if option.var and value not in option.var:
+                return f"Value '{value}' not in allowed values: {option.var}"
+        elif option.type == "string":
+            if not isinstance(value, (str, type(None))):
+                return f"Expected string value for string option, got {type(value).__name__}"
+        # 'button' type triggers an action, doesn't take a persistent value
 
         return None

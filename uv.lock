@@ -43,7 +43,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/93/09/7d04d7581ae3bb8b5
 
 [[package]]
 name = "chess-uci-mcp"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "chess" },

@@ -11,6 +11,12 @@ import chess
 from mcp.server import FastMCP
 
 from chess_uci_mcp.engine import UCIEngine
+from chess_uci_mcp.types import (
+    EngineInfo,
+    GetEngineOptionsResult,
+    OptionInfo,
+    SetEngineOptionResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,19 +133,82 @@ class ChessUCIBridge:
             return {"success": True}
 
         @self.mcp.tool("engine_info", description="Get information about the chess engine.")
-        async def engine_info() -> dict[str, Any]:
+        async def engine_info() -> EngineInfo:
             """
-            Get engine information.
+            Get engine information including engine ID and configured options.
 
             Returns:
-                Engine information
+                Engine information with path, id, and configured options
             """
             if not self.engine:
                 await self._ensure_engine_started()
 
             return {
                 "path": self.engine_path,
-                "options": self.engine_options,
+                "id": self.engine.get_engine_id(),
+                "configured_options": self.engine_options,
+            }
+
+        @self.mcp.tool(
+            "get_engine_options",
+            description="Get all available UCI engine options with their metadata and current values.",
+        )
+        async def get_engine_options() -> GetEngineOptionsResult:
+            """
+            List all available UCI options with their metadata and current values.
+
+            Returns:
+                Dictionary of all options with metadata (type, default, min, max, var)
+                and current values
+            """
+            if not self.engine:
+                await self._ensure_engine_started()
+
+            available_options = self.engine.get_available_options()
+            current_values = self.engine.get_current_option_values()
+
+            options: dict[str, OptionInfo] = {}
+            for name, metadata in available_options.items():
+                # Current value is either explicitly set or falls back to default
+                current_value = current_values.get(name, metadata["default"])
+                options[name] = {
+                    "metadata": metadata,
+                    "current_value": current_value,
+                }
+
+            return {"options": options}
+
+        @self.mcp.tool(
+            "set_engine_option",
+            description="Set one or more UCI engine options at runtime.",
+        )
+        async def set_engine_option(options: dict[str, Any]) -> SetEngineOptionResult:
+            """
+            Set UCI engine options dynamically.
+
+            Args:
+                options: Dictionary mapping option names to values.
+                         Example: {"Hash": 256, "Threads": 4}
+
+            Returns:
+                Result with success status, applied options, and any errors
+            """
+            if not self.engine:
+                await self._ensure_engine_started()
+
+            if not options:
+                return {
+                    "success": True,
+                    "applied_options": {},
+                    "errors": {},
+                }
+
+            applied, errors = await self.engine.set_options(options)
+
+            return {
+                "success": len(errors) == 0,
+                "applied_options": applied,
+                "errors": errors,
             }
 
     async def _ensure_engine_started(self):
