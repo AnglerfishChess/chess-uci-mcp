@@ -15,7 +15,7 @@ from chess_uci_mcp.types import (
     EngineInfo,
     GetEngineOptionsResult,
     OptionInfo,
-    SetEngineOptionResult,
+    SetEngineOptionsResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -179,10 +179,10 @@ class ChessUCIBridge:
             return {"options": options}
 
         @self.mcp.tool(
-            "set_engine_option",
+            "set_engine_options",
             description="Set one or more UCI engine options at runtime.",
         )
-        async def set_engine_option(options: dict[str, Any]) -> SetEngineOptionResult:
+        async def set_engine_options(options: dict[str, Any]) -> SetEngineOptionsResult:
             """
             Set UCI engine options dynamically.
 

@@ -51,8 +51,8 @@ class GetEngineOptionsResult(TypedDict):
     options: dict[str, OptionInfo]
 
 
-class SetEngineOptionResult(TypedDict):
-    """Return type for set_engine_option tool."""
+class SetEngineOptionsResult(TypedDict):
+    """Return type for set_engine_options tool."""
 
     success: bool
     applied_options: dict[str, ConfigValue]
