@@ -1,0 +1,41 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.AnglerfishChess/chess-uci-mcp",
+  "title": "Chess UCI",
+  "description": "Analyze chess positions and get best moves from UCI engines such as Stockfish or Leela",
+  "repository": {
+    "url": "https://github.com/AnglerfishChess/chess-uci-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/AnglerfishChess/chess-uci-mcp",
+  "version": "0.1.2",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "chess-uci-mcp",
+      "version": "0.1.2",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "engine_path",
+          "description": "Path to the UCI-compatible chess engine executable (e.g. Stockfish)",
+          "format": "filepath",
+          "isRequired": true,
+          "default": "/usr/local/bin/stockfish"
+        },
+        {
+          "type": "named",
+          "name": "--think-time",
+          "description": "Default thinking time for the engine, in milliseconds",
+          "isRequired": false,
+          "default": "1000"
+        }
+      ]
+    }
+  ]
+}

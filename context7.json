@@ -1,0 +1,16 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "chess-uci-mcp",
+  "description": "An MCP bridge exposing UCI chess engines such as Stockfish or Leela Chess Zero to any MCP client",
+  "folders": [],
+  "excludeFolders": ["tests", "dist"],
+  "excludeFiles": [],
+  "rules": [
+    "The engine is not bundled: install a UCI engine separately and pass its path as the first argument -- uvx chess-uci-mcp@latest /usr/local/bin/stockfish",
+    "Any UCI-compatible engine works, not only Stockfish; Leela Chess Zero (lc0) is covered by the test suite",
+    "Startup UCI options use a repeatable flag taking two values: -o Threads 4 -o Hash 128",
+    "Options can also be read and changed while the server runs, with get_engine_options and set_engine_options",
+    "analyze always requires an explicit FEN; set_position stores a position for the next get_best_move only",
+    "analyze reports the score from White's perspective: a float in pawns, or the string mateN for a forced mate"
+  ]
+}
