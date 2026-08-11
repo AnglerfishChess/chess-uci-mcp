@@ -147,7 +147,7 @@ ruff check
 
 ### Release process
 
-The checklist lives in the `releasing-a-version` skill under `.claude/skills/`, so a release runs the same way every
+The checklist lives in the `releasing` skill under `.claude/skills/`, so a release runs the same way every
 time: preconditions, version bump, tag, GitHub release. Publishing a GitHub release is the trigger — from there
 `.github/workflows/publish.yml` builds the package and uploads it to PyPI through a
 [trusted publisher](https://docs.pypi.org/trusted-publishers/), then republishes the MCP registry entry. Both
@@ -159,7 +159,7 @@ Nothing is automatic: a release only happens when a human publishes the GitHub r
 
 ```bash
 uv sync    # updates uv.lock
-uv run python .claude/skills/releasing-a-version/scripts/sync_version.py
+uv run python .claude/skills/releasing/scripts/sync_version.py
 ```
 
 That writes `chess_uci_mcp/__init__.py` and both version fields in `server.json`. Passing `--check` instead

@@ -1,5 +1,5 @@
 ---
-name: releasing-a-version
+name: releasing
 description: Cut a release of chess-uci-mcp to PyPI and the MCP registry. Use when the user asks to release, publish, ship or tag a new version, or names a version and asks to get it out. Covers preconditions, the version bump across every file that repeats it, tagging, the GitHub release that triggers publishing, and post-release verification of PyPI, the MCP registry and Context7. Never invoke this on your own initiative -- a release is the user's decision to make.
 argument-hint: [version]
 disable-model-invocation: true

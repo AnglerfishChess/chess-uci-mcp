@@ -7,8 +7,8 @@ that can go stale. The copies are declared once, in `HOMES` below, and both
 modes -- rewrite and `--check` -- walk that same declaration, so adding a new
 place the version lives means adding one line rather than another branch.
 
-    python .claude/skills/releasing-a-version/scripts/sync_version.py          # rewrite the copies
-    python .claude/skills/releasing-a-version/scripts/sync_version.py --check  # exit 1 if any is stale
+    python .claude/skills/releasing/scripts/sync_version.py          # rewrite the copies
+    python .claude/skills/releasing/scripts/sync_version.py --check  # exit 1 if any is stale
 
 `uv.lock` is deliberately absent: `uv sync` owns it.
 
@@ -21,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-# .claude/skills/releasing-a-version/scripts/sync_version.py -> four levels up is the repository root.
+# .claude/skills/releasing/scripts/sync_version.py -> four levels up is the repository root.
 ROOT = Path(__file__).resolve().parents[4]
 PYPROJECT = ROOT / "pyproject.toml"
 
@@ -114,7 +114,7 @@ def main() -> None:
             print(f"Stale against pyproject.toml ({version}):", file=sys.stderr)
             for home, label, found in stale:
                 print(f"  {home.path.relative_to(ROOT)}: {label} is {found!r}", file=sys.stderr)
-            print("Run: python .claude/skills/releasing-a-version/scripts/sync_version.py", file=sys.stderr)
+            print("Run: python .claude/skills/releasing/scripts/sync_version.py", file=sys.stderr)
             sys.exit(1)
         print(f"All {version} copies agree with pyproject.toml")
         return

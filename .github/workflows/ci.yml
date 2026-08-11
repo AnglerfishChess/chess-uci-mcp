@@ -29,6 +29,6 @@ jobs:
 
       # The version is repeated in __init__.py and twice in server.json; this fails the build when a copy drifts
       # from pyproject.toml rather than letting a mislabelled wheel reach PyPI.
-      - run: uv run python .claude/skills/releasing-a-version/scripts/sync_version.py --check
+      - run: uv run python .claude/skills/releasing/scripts/sync_version.py --check
 
       - run: uv run pytest -q
