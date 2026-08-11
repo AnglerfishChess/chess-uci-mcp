@@ -76,6 +76,12 @@ env/
 .uv/
 __pypackages__/
 
+# Editor backups. Only a personal ~/.gitignore_global keeps these out today, which a contributor will not have.
+*~
+
+# Serena's project cache and generated memories
+.serena/
+
 # Project-specific
 *nogit*
 *.local.*
