@@ -1,0 +1,34 @@
+# The engine install is load-bearing. Without a UCI binary on PATH, tests/test_engines.py skips itself at module
+# level and the whole suite passes having run nothing -- a green tick that vouches for absolutely nothing. Linux
+# is also the platform the maintainer does not develop on, which is most of what this job buys.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      # Ubuntu's universe repo carries Stockfish prebuilt, so this costs seconds and no compiler. `command -v` is
+      # the guard that matters: with the binary on PATH the module-level skip cannot fire, so a green suite below
+      # is a suite that genuinely drove an engine.
+      - name: Install Stockfish
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y stockfish
+          command -v stockfish
+
+      - run: uv sync --extra=dev
+      - run: uv run ruff check .
+
+      # The version is repeated in __init__.py and twice in server.json; this fails the build when a copy drifts
+      # from pyproject.toml rather than letting a mislabelled wheel reach PyPI.
+      - run: uv run python .claude/skills/releasing-a-version/scripts/sync_version.py --check
+
+      - run: uv run pytest -q
