@@ -32,9 +32,12 @@ these steps are cheap to retry, and the two that are not — the tag and the rel
 follow, then propagate it to `chess_uci_mcp/__init__.py` and to both version fields in `server.json`:
 
 ```bash
-uv sync
+uv sync --extra=dev
 uv run python ${CLAUDE_SKILL_DIR}/scripts/sync_version.py
 ```
+
+Keep `--extra=dev` on that sync. A bare `uv sync` prunes the extras, quietly uninstalling pytest and ruff — which
+step 1 just relied on, and which you will want again if anything below sends you back.
 
 Commit it all as one change. The version in the code, in `server.json` and on the tag has to be a single string:
 a wheel reporting a version its tag never had is a support puzzle, and a `server.json` naming a package version

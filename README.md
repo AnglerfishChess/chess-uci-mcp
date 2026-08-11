@@ -158,7 +158,7 @@ Nothing is automatic: a release only happens when a human publishes the GitHub r
 `pyproject.toml` holds the version, and every other copy is derived from it:
 
 ```bash
-uv sync    # updates uv.lock
+uv sync --extra=dev    # updates uv.lock, keeping the dev tools installed
 uv run python .claude/skills/releasing/scripts/sync_version.py
 ```
 
