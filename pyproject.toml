@@ -36,7 +36,6 @@ build-backend = "setuptools.build_meta"
 dev = [
     "pytest>=8.3.0",
     "ruff>=0.11.4",
-    "uv-publish>=1.2",
     "pytest-asyncio>=0.23.0",
 ]
 

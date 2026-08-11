@@ -1,6 +1,9 @@
 # chess-uci-mcp
 
-An MCP bridge that provides an interface to UCI chess engines (such as Stockfish).
+An MCP bridge that provides an interface to UCI chess engines (such as Stockfish or Leela Chess Zero).
+
+<!-- mcp-name: io.github.AnglerfishChess/chess-uci-mcp -->
+
 
 ## Dependencies
 
@@ -106,6 +109,8 @@ The bridge provides the following MCP commands:
 2. `get_best_move` - Get the best move for a chess position
 3. `set_position` - Set the current chess position
 4. `engine_info` - Get information about the chess engine
+5. `get_engine_options` - Get all available UCI engine options with their metadata and current values
+6. `set_engine_options` - Set one or more UCI engine options at runtime
 
 ## Development
 
@@ -142,22 +147,42 @@ ruff check
 
 ### Release process
 
-1. Bump version in `pyproject.toml`, `chess_uci_mcp/__init__.py` and `uv.lock`.
-2. Build and publish:
+The checklist lives in the `releasing-a-version` skill under `.claude/skills/`, so a release runs the same way every
+time: preconditions, version bump, tag, GitHub release. Publishing a GitHub release is the trigger — from there
+`.github/workflows/publish.yml` builds the package and uploads it to PyPI through a
+[trusted publisher](https://docs.pypi.org/trusted-publishers/), then republishes the MCP registry entry. Both
+authenticate over OIDC, so no token is stored in this repository or on any developer's machine.
+
+Nothing is automatic: a release only happens when a human publishes the GitHub release.
+
+`pyproject.toml` holds the version, and every other copy is derived from it:
 
 ```bash
-uv build
-uv-publish
+uv sync    # updates uv.lock
+uv run python .claude/skills/releasing-a-version/scripts/sync_version.py
 ```
 
-We use `uv-publish` (install via `uvx uv-publish` or as dev dependency) because it automatically reads PyPI credentials from `~/.pypirc`.
+That writes `chess_uci_mcp/__init__.py` and both version fields in `server.json`. Passing `--check` instead
+reports drift without touching anything, which is what CI runs.
 
-3. Tag and push:
+### The MCP registry
+
+[registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io) is the authoritative index of public
+MCP servers, consumed by Smithery, PulseMCP, Docker Hub and others. It has no search box; it is an API:
 
 ```bash
-git tag v0.x.x
-git push && git push --tags
+curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=chess-uci-mcp&limit=3"
 ```
+
+The listing is described by `server.json`, under the name `io.github.AnglerfishChess/chess-uci-mcp`. GitHub
+authentication grants the `io.github.<user>/*` namespace; an organisation namespace additionally requires Owner
+rights on that organisation, and the name is case-sensitive.
+
+Ownership of the PyPI package is proven by the `mcp-name:` marker near the top of this README, which becomes the
+package description on PyPI. The registry reads it from the *published* artifact, so adding it to git is not
+enough — it only counts once a release carrying it reaches PyPI. Note also that the registry caps `description`
+at 100 characters where PyPI does not, which is why `server.json` carries its own one-line description rather
+than reusing the project's.
 
 ## Related sites
 
