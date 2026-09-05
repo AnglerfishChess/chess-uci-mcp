@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-09-05)
 
 * The UCI conversation and every chess question behind it now go through the in-house
   [esca](https://github.com/AnglerfishChess/esca) library. The MCP tools are unchanged: same names, same

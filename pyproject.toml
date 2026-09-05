@@ -1,6 +1,6 @@
 [project]
 name = "chess-uci-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "An MCP bridge exposing UCI chess engines such as Stockfish or Leela Chess Zero to any MCP client"
 authors = [
     {name = "Alex Myodov", email = "amyodov@gmail.com"}
