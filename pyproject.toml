@@ -15,15 +15,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent"
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
-    "chess>=1.11.2,<2.0.0",
+    "esca>=0.3,<0.4",
     "mcp[cli]>=1.6.0,<2.0.0",
     "click>=8.1.8,<9.0.0",
 ]
@@ -35,6 +33,7 @@ build-backend = "setuptools.build_meta"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.0",
+    "pyrefly>=0.16.0",
     "ruff>=0.11.4",
     "pytest-asyncio>=0.23.0",
 ]
@@ -48,4 +47,17 @@ packages = ["chess_uci_mcp"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PT", "RUF"]
+
+[tool.pyrefly]
+project-includes = ["chess_uci_mcp", "tests"]
+search-path = [".", "tests"]
+python-version = "3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers -ra"
+asyncio_default_fixture_loop_scope = "function"

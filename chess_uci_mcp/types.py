@@ -1,10 +1,9 @@
 """Type definitions for chess-uci-mcp."""
 
-from typing import Optional, TypedDict, Union
+from typing import TypedDict
 
-
-# Type alias matching python-chess's ConfigValue
-ConfigValue = Union[str, int, bool, None]
+# The types a UCI option value can take.
+ConfigValue = str | int | bool | None
 
 
 class EngineId(TypedDict, total=False):
@@ -25,9 +24,9 @@ class OptionMetadata(TypedDict):
     name: str
     type: str  # 'check', 'spin', 'combo', 'button', 'string'
     default: ConfigValue
-    min: Optional[int]  # Only for 'spin' type
-    max: Optional[int]  # Only for 'spin' type
-    var: Optional[list[str]]  # Only for 'combo' type
+    min: int | None  # Only for 'spin' type
+    max: int | None  # Only for 'spin' type
+    var: list[str] | None  # Only for 'combo' type
 
 
 class OptionInfo(TypedDict):

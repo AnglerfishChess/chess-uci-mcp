@@ -11,6 +11,14 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    # Overrides the .python-version pin the working copy carries, for every uv step below rather than just
+    # the sync -- uv otherwise rebuilds the environment at the pinned version under the first `uv run`.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -26,6 +34,8 @@ jobs:
 
       - run: uv sync --extra=dev
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyrefly check
 
       # The version is repeated in __init__.py and twice in server.json; this fails the build when a copy drifts
       # from pyproject.toml rather than letting a mislabelled wheel reach PyPI.

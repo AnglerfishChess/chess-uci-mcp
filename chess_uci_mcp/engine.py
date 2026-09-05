@@ -5,19 +5,87 @@ This module provides functionality to interact with UCI-compatible chess engines
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
-import chess.engine
+import esca
+from esca import uci
 
-from chess_uci_mcp.types import ConfigValue, OptionMetadata
+from chess_uci_mcp.types import ConfigValue, EngineId, OptionMetadata
 
 logger = logging.getLogger(__name__)
 
+#: Added to a search's own budget, so that waiting for the answer outlasts the search asked for.
+_ANSWER_MARGIN = 10.0
+
+
+def _game(fen: str | None = None, moves: list[str] | None = None) -> esca.Game:
+    """
+    Build a game at `fen` (the starting position if None) with `moves` played.
+
+    Args:
+        fen: FEN string of the position to start from
+        moves: Moves in UCI format to play from it
+
+    Returns:
+        Game spelling castling the way engines do, e.g. "e1g1"
+
+    Raises:
+        ValueError: If the FEN or any of the moves cannot be read
+    """
+    game = esca.Game.from_fen(fen) if fen else esca.Game()
+    game.castling_output = esca.KING_TWO_SQUARES
+    for move in moves or []:
+        game.play(move)
+    return game
+
+
+def _spell_line(game: esca.Game, moves: list[esca.Move]) -> list[str]:
+    """
+    Spell a line in UCI, each move read in the position it is played in.
+
+    Args:
+        game: Game whose current position the line starts from
+        moves: Moves of the line, in order
+
+    Returns:
+        Moves in UCI format, cut short at one that cannot be played
+    """
+    walk = esca.Game.from_position(game.position, variant=game.variant)
+    walk.castling_output = esca.KING_TWO_SQUARES
+    line: list[str] = []
+    for move in moves:
+        line.append(walk.move_to_uci(move))
+        try:
+            walk.play(move)
+        except ValueError:
+            break
+    return line
+
+
+def _coerce(option: uci.Option, value: Any) -> ConfigValue:
+    """
+    Read `value` as a value of the option's own type.
+
+    Args:
+        option: Option the value is meant for
+        value: Value as given, possibly as text
+
+    Returns:
+        Value of the type the option declared
+    """
+    if option.type == "check":
+        return value if isinstance(value, bool) else str(value).strip().lower() not in ("false", "0", "")
+    if option.type == "spin":
+        return value if isinstance(value, int) and not isinstance(value, bool) else int(str(value))
+    if option.type == "button":
+        return None
+    return str(value)
+
 
 class UCIEngine:
-    """A wrapper for UCI chess engines using python-chess."""
+    """A wrapper for UCI chess engines."""
 
-    def __init__(self, engine_path: str, options: Optional[dict[str, Any]] = None):
+    def __init__(self, engine_path: str, options: dict[str, Any] | None = None):
         """
         Initialize UCI engine wrapper.
 
@@ -27,10 +95,11 @@ class UCIEngine:
         """
         self.engine_path = engine_path
         self.options = options or {}
-        self.transport = None
-        self.engine = None
+        self.engine: uci.AsyncEngine | None = None
         self._ready = False
         self._current_option_values: dict[str, ConfigValue] = {}
+        self._current_fen: str | None = None
+        self._current_moves: list[str] = []
 
     async def start(self) -> None:
         """
@@ -40,34 +109,31 @@ class UCIEngine:
             RuntimeError: If the engine fails to start
         """
         logger.info("Starting engine: %s", self.engine_path)
+        engine = uci.AsyncEngine(self.engine_path)
         try:
-            # Start the engine process
-            self.transport, self.engine = await chess.engine.popen_uci(self.engine_path)
+            await engine.handshake()
+            await engine.new_game()
 
-            # Configure engine options
-            if self.options:
-                supported_options = self.engine.options
-                configurable_options = {}
-                for name, value in self.options.items():
-                    if name in supported_options:
-                        configurable_options[name] = value
-                        logger.info("Setting engine option: %s = %s", name, value)
-                    else:
-                        logger.warning("Engine does not support option '%s'. Ignoring.", name)
+            for name, value in self.options.items():
+                option = self._declared(name, engine)
+                if option is None:
+                    logger.warning("Engine does not support option '%s'. Ignoring.", name)
+                    continue
+                logger.info("Setting engine option: %s = %s", name, value)
+                coerced = _coerce(option, value)
+                await engine.set_option(option.name, coerced)
+                self._current_option_values[name] = coerced
+            if self._current_option_values:
+                await engine.is_ready()
 
-                if configurable_options:
-                    await self.engine.configure(configurable_options)
-                    self._current_option_values.update(configurable_options)
-
+            self.engine = engine
             self._ready = True
             logger.info("Engine %s started and ready", self.engine_path)
         except Exception as e:
             logger.error("Failed to start engine: %s", e)
-            if self.transport and self.engine:
-                await self.engine.quit()
-                self.transport = None
-                self.engine = None
-            raise RuntimeError(f"Failed to start engine: {e}")
+            engine.kill()
+            self.engine = None
+            raise RuntimeError(f"Failed to start engine: {e}") from e
 
     async def stop(self) -> None:
         """Stop the engine process."""
@@ -78,7 +144,6 @@ class UCIEngine:
             except Exception as e:
                 logger.error("Error during engine shutdown: %s", e)
             finally:
-                self.transport = None
                 self.engine = None
                 self._ready = False
 
@@ -99,28 +164,26 @@ class UCIEngine:
         if not self.engine or not self._ready:
             raise RuntimeError("Engine not started")
 
-        # Create a board from the FEN string
-        board = chess.Board(fen)
+        game = _game(fen)
+        seconds = time_ms / 1000
+        lines = await self.engine.analyse(
+            game,
+            uci.Limits(movetime=seconds),
+            timeout=seconds + _ANSWER_MARGIN,
+        )
+        if not lines:
+            return {"depth": 0, "score": None, "pv": [], "best_move": None}
 
-        # Set time limit for analysis
-        limit = chess.engine.Limit(time=time_ms / 1000)
-
-        # Run analysis
-        info = await self.engine.analyse(board, limit)
-
-        # Format the result
-        result = {
-            "depth": info.get("depth", 0),
-            "score": self._format_score(info.get("score")),
-            "pv": [move.uci() for move in info.get("pv", [])],
-            "best_move": info.get("pv", [None])[0].uci() if info.get("pv") else None,
+        best = lines[0]
+        pv = _spell_line(game, best.pv)
+        return {
+            "depth": best.depth if best.depth is not None else 0,
+            "score": self._format_score(best, game.position.side_to_move),
+            "pv": pv,
+            "best_move": pv[0] if pv else None,
         }
 
-        return result
-
-    async def set_position(
-        self, fen: Optional[str] = None, moves: Optional[list[str]] = None
-    ) -> None:
+    async def set_position(self, fen: str | None = None, moves: list[str] | None = None) -> None:
         """
         Set a position on the engine's internal board.
 
@@ -134,11 +197,6 @@ class UCIEngine:
         if not self.engine or not self._ready:
             raise RuntimeError("Engine not started")
 
-        # This method doesn't do anything directly with python-chess
-        # as the engine state is managed internally by the chess.engine module.
-        # Position will be set when get_best_move or analyze_position is called.
-
-        # Store the position information for later use
         self._current_fen = fen
         self._current_moves = moves or []
         logger.debug("Position set: FEN=%s, Moves=%s", fen or "startpos", moves)
@@ -159,55 +217,37 @@ class UCIEngine:
         if not self.engine or not self._ready:
             raise RuntimeError("Engine not started")
 
-        # Create a board
-        board = (
-            chess.Board(self._current_fen)
-            if hasattr(self, "_current_fen") and self._current_fen
-            else chess.Board()
+        game = _game(self._current_fen, self._current_moves)
+        seconds = time_ms / 1000
+        answer = await self.engine.play(
+            game,
+            uci.Limits(movetime=seconds),
+            timeout=seconds + _ANSWER_MARGIN,
         )
+        return game.move_to_uci(answer.best) if answer.best else ""
 
-        # Apply moves if any
-        if hasattr(self, "_current_moves") and self._current_moves:
-            for move_uci in self._current_moves:
-                board.push_uci(move_uci)
-
-        # Set time limit
-        limit = chess.engine.Limit(time=time_ms / 1000)
-
-        # Get best move
-        result = await self.engine.play(board, limit)
-
-        # Return the move in UCI format
-        return result.move.uci() if result.move else ""
-
-    def _format_score(self, score: Optional[chess.engine.PovScore]) -> Optional[Any]:
+    def _format_score(self, info: uci.Info, side_to_move: str) -> float | str | None:
         """
-        Format the score from the engine analysis.
+        Format the score of a search report from White's point of view.
 
         Args:
-            score: PovScore object from python-chess
+            info: Report carrying the score
+            side_to_move: Side the score is reported for, "w" or "b"
 
         Returns:
-            Formatted score value
+            Pawns as a float, "mateN" for a forced mate, or None if unscored
         """
-        if score is None:
-            return None
+        sign = 1 if side_to_move == "w" else -1
 
-        # Get score from white's perspective
-        white_score = score.white()
+        if info.mate is not None:
+            return f"mate{sign * info.mate}"
 
-        # Check if it's a mate score
-        if white_score.is_mate():
-            mate_in = white_score.mate()
-            return f"mate{mate_in}" if mate_in is not None else None
-
-        # Return centipawn score as a float
-        if white_score.score() is not None:
-            return white_score.score() / 100.0
+        if info.cp is not None:
+            return sign * info.cp / 100.0
 
         return None
 
-    def get_engine_id(self) -> dict[str, str]:
+    def get_engine_id(self) -> EngineId:
         """
         Get the engine identification info.
 
@@ -219,7 +259,13 @@ class UCIEngine:
         """
         if not self.engine or not self._ready:
             raise RuntimeError("Engine not started")
-        return dict(self.engine.id)
+
+        engine_id: EngineId = {}
+        if self.engine.name is not None:
+            engine_id["name"] = self.engine.name
+        if self.engine.author is not None:
+            engine_id["author"] = self.engine.author
+        return engine_id
 
     def get_available_options(self) -> dict[str, OptionMetadata]:
         """
@@ -242,7 +288,7 @@ class UCIEngine:
                 "default": option.default,
                 "min": option.min,
                 "max": option.max,
-                "var": list(option.var) if option.var else None,
+                "var": list(option.vars) if option.vars else None,
             }
         return options
 
@@ -258,9 +304,7 @@ class UCIEngine:
         """
         return dict(self._current_option_values)
 
-    async def set_options(
-        self, options: dict[str, ConfigValue]
-    ) -> tuple[dict[str, ConfigValue], dict[str, str]]:
+    async def set_options(self, options: dict[str, ConfigValue]) -> tuple[dict[str, ConfigValue], dict[str, str]]:
         """
         Set one or more UCI options at runtime.
 
@@ -278,36 +322,59 @@ class UCIEngine:
 
         applied: dict[str, ConfigValue] = {}
         errors: dict[str, str] = {}
-        supported_options = self.engine.options
 
         for name, value in options.items():
-            if name not in supported_options:
+            option = self._declared(name)
+            if option is None:
                 errors[name] = f"Option '{name}' is not supported by this engine"
                 continue
 
             # Validate the value based on option type
-            option_meta = supported_options[name]
-            validation_error = self._validate_option_value(option_meta, value)
+            validation_error = self._validate_option_value(option, value)
             if validation_error:
                 errors[name] = validation_error
                 continue
 
+            try:
+                await self.engine.set_option(option.name, value)
+            except ValueError as e:
+                errors[name] = str(e)
+                continue
+
             applied[name] = value
+            logger.info("Set engine option: %s = %s", name, value)
 
         if applied:
-            await self.engine.configure(applied)
             self._current_option_values.update(applied)
-            for name, value in applied.items():
-                logger.info("Set engine option: %s = %s", name, value)
+            await self.engine.is_ready()
 
         return applied, errors
 
-    def _validate_option_value(self, option: Any, value: ConfigValue) -> Optional[str]:
+    def _declared(self, name: str, engine: uci.AsyncEngine | None = None) -> uci.Option | None:
+        """
+        Find an option the engine offers, matched without regard to case.
+
+        Args:
+            name: Option name as the caller spelled it
+            engine: Engine to ask, the started one by default
+
+        Returns:
+            The option, or None if the engine offers no such one
+        """
+        engine = engine if engine is not None else self.engine
+        if engine is None:
+            return None
+        for option in engine.options.values():
+            if option.name.lower() == name.lower():
+                return option
+        return None
+
+    def _validate_option_value(self, option: uci.Option, value: ConfigValue) -> str | None:
         """
         Validate an option value against its constraints.
 
         Args:
-            option: Option object from python-chess
+            option: Option the value is meant for
             value: Value to validate
 
         Returns:
@@ -317,18 +384,17 @@ class UCIEngine:
             if not isinstance(value, bool):
                 return f"Expected boolean value for check option, got {type(value).__name__}"
         elif option.type == "spin":
-            if not isinstance(value, int):
+            if not isinstance(value, int) or isinstance(value, bool):
                 return f"Expected integer value for spin option, got {type(value).__name__}"
             if option.min is not None and value < option.min:
                 return f"Value {value} is below minimum {option.min}"
             if option.max is not None and value > option.max:
                 return f"Value {value} is above maximum {option.max}"
         elif option.type == "combo":
-            if option.var and value not in option.var:
-                return f"Value '{value}' not in allowed values: {option.var}"
-        elif option.type == "string":
-            if not isinstance(value, (str, type(None))):
-                return f"Expected string value for string option, got {type(value).__name__}"
+            if option.vars and value not in option.vars:
+                return f"Value '{value}' not in allowed values: {option.vars}"
+        elif option.type == "string" and not isinstance(value, str | None):
+            return f"Expected string value for string option, got {type(value).__name__}"
         # 'button' type triggers an action, doesn't take a persistent value
 
         return None

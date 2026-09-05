@@ -43,9 +43,7 @@ class TextHome:
 
     def apply(self, version: str) -> None:
         text = self.path.read_text(encoding="utf-8")
-        rewritten = self.pattern.sub(
-            lambda m: m.group(0).replace(m.group(1), version), text
-        )
+        rewritten = self.pattern.sub(lambda m: m.group(0).replace(m.group(1), version), text)
         self.path.write_text(rewritten, encoding="utf-8")
 
 
@@ -102,12 +100,7 @@ def main() -> None:
     check = "--check" in sys.argv[1:]
     version = source_of_truth()
 
-    stale = [
-        (home, label, found)
-        for home in HOMES
-        for label, found in home.current()
-        if found != version
-    ]
+    stale = [(home, label, found) for home in HOMES for label, found in home.current() if found != version]
 
     if check:
         if stale:

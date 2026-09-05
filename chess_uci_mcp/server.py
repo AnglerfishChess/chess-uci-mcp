@@ -5,9 +5,9 @@ This module implements the MCP server that provides access to UCI chess engines.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
-import chess
+import esca
 from mcp.server import FastMCP
 
 from chess_uci_mcp.engine import UCIEngine
@@ -36,7 +36,7 @@ class ChessUCIBridge:
         self.default_think_time = options.pop("think_time", 1000)
         self.engine_options = options
 
-        self.engine: Optional[UCIEngine] = None
+        self.engine: UCIEngine | None = None
         self.mcp = FastMCP("chess-uci")
 
         # Register tools
@@ -46,7 +46,7 @@ class ChessUCIBridge:
         """Register MCP tools for chess engine functions."""
 
         @self.mcp.tool("analyze", description="Analyze a chess position specified by FEN string.")
-        async def analyze(fen: str, time_ms: Optional[int] = None) -> dict[str, Any]:
+        async def analyze(fen: str, time_ms: int | None = None) -> dict[str, Any]:
             """
             Analyze a chess position.
 
@@ -57,23 +57,22 @@ class ChessUCIBridge:
             Returns:
                 Analysis results
             """
-            if not self.engine:
-                await self._ensure_engine_started()
+            engine = await self._ensure_engine_started()
 
             # Use default time if not specified
             think_time = time_ms if time_ms is not None else self.default_think_time
 
             # Validate FEN
             try:
-                chess.Board(fen)
+                esca.Position.from_fen(fen)
             except ValueError:
-                raise ValueError(f"Invalid FEN string: {fen}")
+                raise ValueError(f"Invalid FEN string: {fen}") from None
 
-            result = await self.engine.analyze_position(fen, think_time)
+            result = await engine.analyze_position(fen, think_time)
             return result
 
         @self.mcp.tool("get_best_move", description="Get the best move for a chess position.")
-        async def get_best_move(fen: Optional[str] = None, time_ms: Optional[int] = None) -> str:
+        async def get_best_move(fen: str | None = None, time_ms: int | None = None) -> str:
             """
             Get best move for current or specified position.
 
@@ -84,27 +83,24 @@ class ChessUCIBridge:
             Returns:
                 Best move in UCI format (e.g., "e2e4")
             """
-            if not self.engine:
-                await self._ensure_engine_started()
+            engine = await self._ensure_engine_started()
 
             # Set position if FEN is provided
             if fen:
                 try:
-                    chess.Board(fen)
-                    await self.engine.set_position(fen)
+                    esca.Position.from_fen(fen)
                 except ValueError:
-                    raise ValueError(f"Invalid FEN string: {fen}")
+                    raise ValueError(f"Invalid FEN string: {fen}") from None
+                await engine.set_position(fen)
 
             # Use default time if not specified
             think_time = time_ms if time_ms is not None else self.default_think_time
 
-            best_move = await self.engine.get_best_move(think_time)
+            best_move = await engine.get_best_move(think_time)
             return best_move
 
         @self.mcp.tool("set_position", description="Set the current chess position.")
-        async def set_position(
-            fen: Optional[str] = None, moves: Optional[list[str]] = None
-        ) -> dict[str, bool]:
+        async def set_position(fen: str | None = None, moves: list[str] | None = None) -> dict[str, bool]:
             """
             Set a position on the engine's internal board.
 
@@ -115,21 +111,20 @@ class ChessUCIBridge:
             Returns:
                 Success status
             """
-            if not self.engine:
-                await self._ensure_engine_started()
+            engine = await self._ensure_engine_started()
 
             # Validate FEN if provided
             if fen:
                 try:
-                    chess.Board(fen)
+                    esca.Position.from_fen(fen)
                 except ValueError:
-                    raise ValueError(f"Invalid FEN string: {fen}")
+                    raise ValueError(f"Invalid FEN string: {fen}") from None
 
             # Validate moves
             if moves and not isinstance(moves, list):
                 raise ValueError("Moves must be a list of strings")
 
-            await self.engine.set_position(fen, moves)
+            await engine.set_position(fen, moves)
             return {"success": True}
 
         @self.mcp.tool("engine_info", description="Get information about the chess engine.")
@@ -140,12 +135,11 @@ class ChessUCIBridge:
             Returns:
                 Engine information with path, id, and configured options
             """
-            if not self.engine:
-                await self._ensure_engine_started()
+            engine = await self._ensure_engine_started()
 
             return {
                 "path": self.engine_path,
-                "id": self.engine.get_engine_id(),
+                "id": engine.get_engine_id(),
                 "configured_options": self.engine_options,
             }
 
@@ -161,11 +155,10 @@ class ChessUCIBridge:
                 Dictionary of all options with metadata (type, default, min, max, var)
                 and current values
             """
-            if not self.engine:
-                await self._ensure_engine_started()
+            engine = await self._ensure_engine_started()
 
-            available_options = self.engine.get_available_options()
-            current_values = self.engine.get_current_option_values()
+            available_options = engine.get_available_options()
+            current_values = engine.get_current_option_values()
 
             options: dict[str, OptionInfo] = {}
             for name, metadata in available_options.items():
@@ -193,8 +186,7 @@ class ChessUCIBridge:
             Returns:
                 Result with success status, applied options, and any errors
             """
-            if not self.engine:
-                await self._ensure_engine_started()
+            engine = await self._ensure_engine_started()
 
             if not options:
                 return {
@@ -203,7 +195,7 @@ class ChessUCIBridge:
                     "errors": {},
                 }
 
-            applied, errors = await self.engine.set_options(options)
+            applied, errors = await engine.set_options(options)
 
             return {
                 "success": len(errors) == 0,
@@ -211,13 +203,15 @@ class ChessUCIBridge:
                 "errors": errors,
             }
 
-    async def _ensure_engine_started(self):
-        """Ensure the engine is started."""
+    async def _ensure_engine_started(self) -> UCIEngine:
+        """Ensure the engine is started, and answer with it."""
         if not self.engine:
             # Create a copy of options without think_time (it's not a UCI option)
             engine_options = {k: v for k, v in self.engine_options.items() if k != "think_time"}
-            self.engine = UCIEngine(self.engine_path, engine_options)
-            await self.engine.start()
+            engine = UCIEngine(self.engine_path, engine_options)
+            await engine.start()
+            self.engine = engine
+        return self.engine
 
     async def start(self):
         """Start the MCP bridge."""
