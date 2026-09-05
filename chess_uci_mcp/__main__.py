@@ -18,7 +18,7 @@ logger = logging.getLogger("chess_uci_mcp")
 
 async def run_bridge(engine_path: str, uci_options: dict[str, str], think_time: int) -> None:
     """Asynchronously run and manage the ChessUCIBridge."""
-    bridge = ChessUCIBridge(engine_path, think_time=think_time, options=uci_options)
+    bridge = ChessUCIBridge(engine_path, think_time=think_time, **uci_options)
     try:
         await bridge.start()
     except KeyboardInterrupt:
