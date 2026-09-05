@@ -22,7 +22,7 @@ classifiers = [
 requires-python = ">=3.12"
 dependencies = [
     "esca>=0.3,<0.4",
-    "mcp[cli]>=1.6.0,<2.0.0",
+    "mcp[cli]>=1.28.1,<2.0.0",
     "click>=8.1.8,<9.0.0",
 ]
 

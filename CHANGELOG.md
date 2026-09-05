@@ -7,3 +7,4 @@
   arguments, same answers.
 * Python 3.12 or newer is required.
 * `-o NAME VALUE` on the command line now actually reaches the engine.
+* `mcp` 1.28.1 or newer; the lockfile is refreshed past every advisory GitHub had open against it.
