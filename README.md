@@ -4,10 +4,13 @@ An MCP bridge that provides an interface to UCI chess engines (such as Stockfish
 
 <!-- mcp-name: io.github.AnglerfishChess/chess-uci-mcp -->
 
+The UCI side runs on [esca](https://github.com/AnglerfishChess/esca): it speaks the protocol to the engine and
+answers every chess question the bridge has along the way.
+
 
 ## Dependencies
 
-You need to have Python 3.10 or newer, and also `uv`/`uvx` installed.
+You need to have Python 3.12 or newer, and also `uv`/`uvx` installed.
 
 ## Usage
 
@@ -123,7 +126,7 @@ git clone https://github.com/AnglerfishChess/chess-uci-mcp.git
 cd chess-uci-mcp
 
 # Create a virtual environment
-uv venv --python python3.10
+uv venv --python python3.13
 
 # Activate the virtual environment
 source .venv/bin/activate  # On Unix/macOS
@@ -183,6 +186,13 @@ package description on PyPI. The registry reads it from the *published* artifact
 enough — it only counts once a release carrying it reaches PyPI. Note also that the registry caps `description`
 at 100 characters where PyPI does not, which is why `server.json` carries its own one-line description rather
 than reusing the project's.
+
+## Related projects
+
+* [esca](https://github.com/AnglerfishChess/esca) — the MIT Rust/Python chess library that speaks UCI for this
+  server.
+* [chessplaza](https://github.com/AnglerfishChess/chessplaza) — AI chess hustlers with personalities, playing
+  through this server.
 
 ## Related sites
 
