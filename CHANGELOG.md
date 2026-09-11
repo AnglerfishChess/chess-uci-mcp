@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-09-11)
+
+* The server now runs on [esca](https://github.com/AnglerfishChess/esca) 0.4.0, which renamed most of what
+  it answers with. Nothing here changed for anyone using it: the same six tools, the same arguments, the
+  same answers.
+
 ## 0.3.0 (2026-09-05)
 
 * The UCI conversation and every chess question behind it now go through the in-house
