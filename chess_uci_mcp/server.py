@@ -65,7 +65,7 @@ class ChessUCIBridge:
             # Validate FEN
             try:
                 esca.Position.from_fen(fen)
-            except ValueError:
+            except esca.Error:
                 raise ValueError(f"Invalid FEN string: {fen}") from None
 
             result = await engine.analyze_position(fen, think_time)
@@ -89,7 +89,7 @@ class ChessUCIBridge:
             if fen:
                 try:
                     esca.Position.from_fen(fen)
-                except ValueError:
+                except esca.Error:
                     raise ValueError(f"Invalid FEN string: {fen}") from None
                 await engine.set_position(fen)
 
@@ -117,7 +117,7 @@ class ChessUCIBridge:
             if fen:
                 try:
                     esca.Position.from_fen(fen)
-                except ValueError:
+                except esca.Error:
                     raise ValueError(f"Invalid FEN string: {fen}") from None
 
             # Validate moves

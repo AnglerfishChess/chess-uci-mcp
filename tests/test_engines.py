@@ -264,7 +264,7 @@ async def test_moves_are_applied_to_the_position(engine_path: str) -> None:
         best_move = await engine.get_best_move(time_ms=200)
 
         game = _game(None, moves)
-        assert game.position.side_to_move == "b"
+        assert game.position.side_to_move == "black"
         assert best_move in [game.move_to_uci(move) for move in game.legal_moves()]
     finally:
         if engine._ready:
@@ -299,7 +299,7 @@ async def test_pv_replays_from_the_position_analysed(engine_path: str) -> None:
 def test_castling_is_spelled_king_two_squares(fen: str, king_to_rook: str, king_two_squares: str) -> None:
     """Castling reads the way engines write it: the king moving two squares."""
     game = _game(fen)
-    castling = next(move for move in game.legal_moves() if move.is_castling and move.uci == king_to_rook)
+    castling = next(move for move in game.legal_moves() if move.is_castling and move.uci() == king_to_rook)
 
     assert game.move_to_uci(castling) == king_two_squares
     assert _spell_line(game, [castling]) == [king_two_squares]

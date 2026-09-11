@@ -30,7 +30,7 @@ def _game(fen: str | None = None, moves: list[str] | None = None) -> esca.Game:
         Game spelling castling the way engines do, e.g. "e1g1"
 
     Raises:
-        ValueError: If the FEN or any of the moves cannot be read
+        esca.Error: If the FEN or any of the moves cannot be read
     """
     game = esca.Game.from_fen(fen) if fen else esca.Game()
     game.castling_output = esca.KING_TWO_SQUARES
@@ -50,14 +50,14 @@ def _spell_line(game: esca.Game, moves: list[esca.Move]) -> list[str]:
     Returns:
         Moves in UCI format, cut short at one that cannot be played
     """
-    walk = esca.Game.from_position(game.position, variant=game.variant)
-    walk.castling_output = esca.KING_TWO_SQUARES
+    variant = game.variant
+    position = game.position
     line: list[str] = []
     for move in moves:
-        line.append(walk.move_to_uci(move))
+        line.append(position.uci(move, variant=variant, castling=esca.KING_TWO_SQUARES))
         try:
-            walk.play(move)
-        except ValueError:
+            position = position.play(move, variant=variant)
+        except esca.Error:
             break
     return line
 
@@ -232,12 +232,12 @@ class UCIEngine:
 
         Args:
             info: Report carrying the score
-            side_to_move: Side the score is reported for, "w" or "b"
+            side_to_move: Side the score is reported for, "white" or "black"
 
         Returns:
             Pawns as a float, "mateN" for a forced mate, or None if unscored
         """
-        sign = 1 if side_to_move == "w" else -1
+        sign = 1 if side_to_move == "white" else -1
 
         if info.mate is not None:
             return f"mate{sign * info.mate}"
